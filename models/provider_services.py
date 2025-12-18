@@ -1,6 +1,6 @@
 from sqlalchemy import Column, Integer, Boolean, ForeignKey
-from db.database import Base
 from sqlalchemy.orm import relationship
+from db.database import Base
 
 class ProviderService(Base):
     __tablename__ = "provider_services"
