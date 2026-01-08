@@ -1,93 +1,219 @@
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 from dependencies import get_db
 from models.bookings import Booking
-from schemas.bookings_schema import BookingCreate
 from models.users import User
-from models.providers import Provider
 from models.services import Service
+from models.providers import Provider
+from schemas.bookings_schema import BookingCreate, BookingUpdate
 
-router = APIRouter(prefix="/bookings", tags=["Bookings"])
+router = APIRouter(prefix="/api/bookings", tags=["Bookings"])
 
-@router.post("/create")
-def create_booking(booking: BookingCreate, db: Session = Depends(get_db)):
-    user = db.query(User).filter(User.id == booking.user_id).first()
+
+def get_current_user(db: Session = Depends(get_db)):
+    user = db.query(User).first()
     if not user:
-        return {"error": "User not found"}
+        raise HTTPException(status_code=401)
+    return user
 
-    provider = db.query(Provider).filter(Provider.id == booking.provider_id).first()
-    if not provider:
-        return {"error": "Provider not found"}
 
+# create booking
+@router.post("", status_code=status.HTTP_201_CREATED)
+def create_booking(
+    booking: BookingCreate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
     service = db.query(Service).filter(Service.id == booking.service_id).first()
     if not service:
-        return {"error": "Service not found"}
+        raise HTTPException(status_code=404, detail="Service not found")
 
     new_booking = Booking(
-        user_id=booking.user_id,
-        provider_id=booking.provider_id,
+        user_id=current_user.id,
         service_id=booking.service_id,
-        date=booking.date,
-        time=booking.time,
         address=booking.address,
         city=booking.city,
         pincode=booking.pincode,
+        date=booking.date,
+        time=booking.time,
         instructions=booking.instructions,
-        status=booking.status
+        status="pending",
     )
 
     db.add(new_booking)
     db.commit()
     db.refresh(new_booking)
-    return new_booking
 
-@router.get("/all")
-def get_bookings(db: Session = Depends(get_db)):
-    bookings = db.query(Booking).all()
-    return bookings if bookings else {"message": "No bookings found"}
+    return {"message": "Booking created successfully", "booking_id": new_booking.id}
 
-@router.get("/user/{user_id}")
-def get_user(user_id: int, db: Session = Depends(get_db)):
-    user = db.query(User).filter(User.id == user_id).first()
-    return user if user else {"message": "User not found"}
 
-@router.get("/provider/{provider_id}")
-def get_provider(provider_id: int, db: Session = Depends(get_db)):
-    provider = db.query(Provider).filter(Provider.id == provider_id).first()
-    return provider if provider else {"message": "Provider not found"}
+# get accepted bookings
+@router.get("/accepted")
+def get_accepted_bookings(
+    db: Session = Depends(get_db), current_user: User = Depends(get_current_user)
+):
+    return (
+        db.query(Booking)
+        .filter(Booking.user_id == current_user.id, Booking.status == "confirmed")
+        .all()
+    )
 
+
+# get my bookings
+@router.get("/my")
+def get_my_bookings(
+    db: Session = Depends(get_db), current_user: User = Depends(get_current_user)
+):
+    return db.query(Booking).filter(Booking.user_id == current_user.id).all()
+
+
+# get booking by id
 @router.get("/{booking_id}")
-def get_booking(booking_id: int, db: Session = Depends(get_db)):
-    booking = db.query(Booking).filter(Booking.id == booking_id).first()
-    return booking if booking else {"message": "Booking not found"}
+def get_booking(
+    booking_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    booking = (
+        db.query(Booking)
+        .filter(Booking.id == booking_id, Booking.user_id == current_user.id)
+        .first()
+    )
 
-@router.put("/update/{booking_id}")
-def update_booking(booking_id: int, update: BookingCreate, db: Session = Depends(get_db)):
-    booking = db.query(Booking).filter(Booking.id == booking_id).first()
     if not booking:
-        return {"message": "Booking not found"}
+        raise HTTPException(status_code=404, detail="Booking not found")
 
-    booking.user_id = update.user_id
-    booking.provider_id = update.provider_id
-    booking.service_id = update.service_id
-    booking.date = update.date
-    booking.time = update.time
-    booking.address = update.address
-    booking.city = update.city
-    booking.pincode = update.pincode
-    booking.instructions = update.instructions
-    booking.status = update.status
+    return booking
 
-    db.commit()
-    db.refresh(booking)
-    return {"updated_booking": booking}
 
-@router.delete("/delete/{booking_id}")
-def delete_booking(booking_id: int, db: Session = Depends(get_db)):
-    booking = db.query(Booking).filter(Booking.id == booking_id).first()
+# delete booking
+@router.delete("/{booking_id}")
+def delete_booking(
+    booking_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    booking = (
+        db.query(Booking)
+        .filter(Booking.id == booking_id, Booking.user_id == current_user.id)
+        .first()
+    )
+
     if not booking:
-        return {"message": "Booking not found"}
+        raise HTTPException(status_code=404, detail="Booking not found")
 
     db.delete(booking)
     db.commit()
-    return {"message": "Booking deleted successfully"}
+    return {"message": "Booking cancelled successfully"}
+
+
+# get current provider
+def get_current_provider(db: Session = Depends(get_db)):
+    provider = db.query(Provider).first()
+    if not provider:
+        raise HTTPException(status_code=401, detail="Provider not found")
+    return provider
+
+
+#  USER → GET WHO ACCEPTED THE ORDER
+@router.get("/my/accepted")
+def get_who_accepted_my_booking(
+    db: Session = Depends(get_db), current_user: User = Depends(get_current_user)
+):
+    results = (
+        db.query(Booking, Provider)
+        .join(Provider, Booking.provider_id == Provider.id)
+        .filter(Booking.user_id == current_user.id, Booking.status == "confirmed")
+        .all()
+    )
+
+    response = []
+    for booking, provider in results:
+        response.append(
+            {
+                "booking_id": booking.id,
+                "service_id": booking.service_id,
+                "date": booking.date,
+                "time": booking.time,
+                "status": booking.status,
+                "provider": {
+                    "provider_id": provider.id,
+                    "experience": provider.years_experience,
+                    "location": provider.address,
+                    "bio": provider.bio,
+                },
+            }
+        )
+
+    return response
+
+
+# PROVIDER → PUT CONFIRMED → COMPLETED
+@router.put("/provider/{booking_id}/complete")
+def provider_complete_booking(
+    booking_id: int,
+    db: Session = Depends(get_db),
+    current_provider: Provider = Depends(get_current_provider),
+):
+    booking = (
+        db.query(Booking)
+        .filter(
+            Booking.id == booking_id,
+            Booking.provider_id == current_provider.id,
+            Booking.status == "confirmed",
+        )
+        .first()
+    )
+
+    if not booking:
+        raise HTTPException(
+            status_code=404, detail="Confirmed booking not found for this provider"
+        )
+
+    booking.status = "completed"
+    db.commit()
+    db.refresh(booking)
+
+    return {
+        "message": "Booking marked as completed by provider",
+        "booking_id": booking.id,
+        "status": booking.status,
+    }
+
+
+# PROVIDER → GET USERS WITH PENDING REQUESTS
+@router.get("/provider/pending")
+def get_provider_pending_bookings(
+    db: Session = Depends(get_db),
+    current_provider: Provider = Depends(get_current_provider),
+):
+    bookings = db.query(Booking).filter(Booking.status == "pending").all()
+
+    return bookings
+
+
+# PROVIDER → PUT PENDING → CONFIRMED
+@router.put("/provider/{booking_id}/confirm")
+def confirm_booking(
+    booking_id: int,
+    db: Session = Depends(get_db),
+    current_provider: Provider = Depends(get_current_provider),
+):
+    booking = (
+        db.query(Booking)
+        .filter(Booking.id == booking_id, Booking.status == "pending")
+        .first()
+    )
+
+    if not booking:
+        raise HTTPException(status_code=404, detail="Pending booking not found")
+
+    booking.provider_id = current_provider.id
+    booking.status = "confirmed"
+    db.commit()
+
+    return {
+        "message": "Booking confirmed successfully",
+        "booking_id": booking.id,
+        "status": booking.status,
+    }

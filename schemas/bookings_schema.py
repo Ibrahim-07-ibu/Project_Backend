@@ -1,13 +1,21 @@
 from pydantic import BaseModel
+from datetime import date, time
+from typing import Optional
 
 class BookingCreate(BaseModel):
-    user_id: int
-    provider_id: int
     service_id: int
-    address : str
-    city :str
-    pincode : int
-    date: str
-    time: str
-    instructions: str
-    status: str
+    address: str
+    city: str
+    pincode: str
+    date: date
+    time: time
+    instructions: Optional[str] = None
+
+
+class BookingUpdate(BaseModel):
+    address: str
+    city: str
+    pincode: str
+    date: date
+    time: time
+    instructions: Optional[str] = None

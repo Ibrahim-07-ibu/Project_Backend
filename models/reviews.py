@@ -9,8 +9,7 @@ class Review(Base):
     user_id = Column(Integer, ForeignKey("users.id"), index=True)
     provider_id = Column(Integer, ForeignKey("providers.id"), index=True)
     service_id = Column(Integer, ForeignKey("services.id"))
-    rating_service = Column(Integer)
-    rating_provider = Column(Integer)
+    rating = Column(Integer)
     comment = Column(String)
 
     user = relationship("User", back_populates="reviews")

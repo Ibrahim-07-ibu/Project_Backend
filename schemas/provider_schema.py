@@ -1,24 +1,57 @@
 from pydantic import BaseModel
-from typing import Optional
-from pydantic import BaseModel
-from typing import Optional
+from datetime import date
 
-class ProviderBase(BaseModel):
+
+class ProviderCreate(BaseModel):
+    full_name: str
+    email: str
+    password: str
+    phone: str
+    dob: date
+    address: str
+    service_id: int
+    years_experience: int
+    specialization: str
+    bio: str
+    id_proof: str
+    certificate: str
+
+class ProviderLogin(BaseModel):
+    email: str
+    password: str
+
+
+class ProviderUpdate(BaseModel):
+    full_name: str
+    email: str
+    password: str
+    phone: str
+    dob: date
+    address: str
+    service_id: int
+    years_experience: int
+    specialization: str
+    bio: str
+    id_proof: str
+    certificate: str
+    is_verified: bool
+
+
+class ProviderResponse(BaseModel):
     user_id: int
-    experience: str
-    location: str
-    bio: Optional[str] = None
-    role: Optional[str] = "provider"
-    is_verified: Optional[bool] = False
-
-class ProviderCreate(ProviderBase):
-    pass
-
-class ProviderUpdate(ProviderBase):
-    pass
-
-class ProviderResponse(ProviderBase):
-    id: int
+    full_name: str
+    email: str
+    phone: str
+    dob: date
+    address: str
+    service_id: int
+    years_experience: int
+    specialization: str
+    bio: str
+    id_proof: str
+    certificate: str
+    role: str
+    is_verified: bool
 
     class Config:
         from_attributes = True
